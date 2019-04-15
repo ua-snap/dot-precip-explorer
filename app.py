@@ -1,12 +1,11 @@
-import dash, os, glob, json, io, requests
+import os, json, io, requests
+import dash 
 from dash.dependencies import Input, Output, State
 import dash_core_components as dcc
 import dash_html_components as html
 import plotly.graph_objs as go
-import cufflinks
 import pandas as pd
 import numpy as np
-from collections import defaultdict
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # #  NSIDC-0051 Derived FUBU Data Explorer Tool                         # #
@@ -53,11 +52,10 @@ wrf = wrf.resample('1D').sum() # make daily sums from hourlies
 # get the range of years
 years = acis.index.map(lambda x: x.year).unique()
 
-
 app = dash.Dash(__name__)
 server = app.server
-# server.secret_key = os.environ['SECRET-SNAP-KEY']
-server.secret_key = 'secret_key'
+server.secret_key = os.environ['SECRET-SNAP-KEY']
+# server.secret_key = 'secret_key'
 app.config.supress_callback_exceptions = True
 app.css.append_css({'external_url': 'https://codepen.io/chriddyp/pen/bWLwgP.css'})
 app.title = 'WRF-ACIS-Precip-Compare'
@@ -182,4 +180,4 @@ def update_graph( time_range, community, duration ):
     return graph, corr_value
 
 if __name__ == '__main__':
-    app.run_server( debug=True )
+    app.run_server( debug=False )
