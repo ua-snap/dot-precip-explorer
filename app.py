@@ -86,7 +86,8 @@ app.layout = html.Div([
                             html.Div([
                                 dcc.Dropdown(
                                     id='duration-dd',
-                                    options=[{'label':'{} days'.format(i),'value':i} for i in range(31)],
+                                    options=[{'label':'{} days'.format(i),'value':i} for i in range(31)] + \
+                                    [{'label':'Annual', 'value':366}],
                                     value=0 ),
                                 ], className='four columns'),
                             ], className='row'),
@@ -138,9 +139,14 @@ def update_graph( time_range, community, duration ):
     if duration is not None:
         title = 'ERA-Interim / ACIS Daily Precip Total: {}'.format(community)
         if duration > 0:
-            wrf_sub = wrf_sub.resample('{}D'.format(duration)).mean()
-            acis_sub = acis_sub.resample('{}D'.format(duration)).mean()
-            title = 'ERA-Interim / ACIS Daily Precip Total: {} - {} Day Mean'.format(community, duration) # fill in when complete with testing
+            if duration == 366:
+                wrf_sub = wrf_sub.resample('Y'.format(duration)).max()
+                acis_sub = acis_sub.resample('Y'.format(duration)).max()
+                title = 'ERA-Interim / ACIS Daily Precip Total: {} - {} Max'.format(community, 'Annual') # fill in when complete with testing
+            else:
+                wrf_sub = wrf_sub.resample('{}D'.format(duration)).mean()
+                acis_sub = acis_sub.resample('{}D'.format(duration)).mean()
+                title = 'ERA-Interim / ACIS Daily Precip Total: {} - {} Day Mean'.format(community, duration) # fill in when complete with testing
 
     # get some correlation coefficients
     pearson = wrf_sub.corr( acis_sub, method='pearson' ).round(2)
