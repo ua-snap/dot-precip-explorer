@@ -88,7 +88,7 @@ app.layout = html.Div([
                                     id='duration-dd',
                                     options=[{'label':'{} days'.format(i),'value':i} for i in range(31)] + \
                                     [{'label':'Annual', 'value':366}],
-                                    value=0 ),
+                                    value=366 ),
                                 ], className='four columns'),
                             ], className='row'),
 
@@ -108,7 +108,7 @@ app.layout = html.Div([
                             marks={i:str(i) for i in years},
                             min=min(years),
                             max=max(years),
-                            value=[2007, 2008],
+                            value=[1979, 2015],
                             pushable=True)
                         ])
                     ], className='eleven columns'),
