@@ -54,8 +54,8 @@ years = acis.index.map(lambda x: x.year).unique()
 
 app = dash.Dash(__name__)
 server = app.server
-server.secret_key = os.environ['SECRET-SNAP-KEY']
-# server.secret_key = 'secret_key'
+# server.secret_key = os.environ['SECRET-SNAP-KEY']
+server.secret_key = 'secret_key'
 app.config.supress_callback_exceptions = True
 app.css.append_css({'external_url': 'https://codepen.io/chriddyp/pen/bWLwgP.css'})
 app.title = 'WRF-ACIS-Precip-Compare'
@@ -86,14 +86,19 @@ app.layout = html.Div([
                             html.Div([
                                 dcc.Dropdown(
                                     id='duration-dd',
-                                    options=[{'label':'{} days'.format(i),'value':i} for i in range(31)] + \
-                                    [{'label':'Annual', 'value':366}],
+                                    options=[{'label':'Annual', 'value':366}, {'label':'Monthly','value':555}] +\
+                                    [{'label':'{} days'.format(i),'value':i} for i in range(31)],
                                     value=366 ),
                                 ], className='four columns'),
                             ], className='row'),
 
                         ], className='nine columns'),
-
+                    html.Div([
+                        dcc.Dropdown(
+                            id='metric-dd',
+                            options=[{'label':i,'value':i} for i in ['mean','max']],#'min',
+                            value='max'),
+                        ], className='three columns'),
                     html.Div([
                         dcc.Markdown(id='corr-label')
                         ], className='three columns'),
@@ -124,66 +129,88 @@ def update_thresh_value( thresh ):
             Output('corr-label','children')],
             [Input('time-slider', 'value'),
             Input('community-dd', 'value'),
-            Input('duration-dd', 'value'),])
-def update_graph( time_range, community, duration ):
+            Input('duration-dd', 'value'),
+            Input('metric-dd','value'),])
+def update_graph( time_range, community, duration, metric ):
     begin,end = time_range
     begin = str(begin)
     end = str(end)
 
     # pull data for the year we want to examine
-    wrf_sub = wrf[community].copy(deep=True)
-    acis_sub = acis[community].copy(deep=True)
+    wrf_sub = wrf[community].copy(deep=True).astype(np.float32)
+    acis_sub = acis[community].copy(deep=True).astype(np.float32)
     
+    metric_lu = {'min':'Min', 'mean':'Mean', 'max':'Max'}
     # duration and plot title-fu
     title = 'ERA-Interim / ACIS Daily Precip Total' # base title if None
     if duration is not None:
+        print(duration)
         title = 'ERA-Interim / ACIS Daily Precip Total: {}'.format(community)
         if duration > 0:
             if duration == 366:
-                wrf_sub = wrf_sub.resample('Y'.format(duration)).max()
-                acis_sub = acis_sub.resample('Y'.format(duration)).max()
-                title = 'ERA-Interim / ACIS Daily Precip Total: {} - {} Max'.format(community, 'Annual') # fill in when complete with testing
+                wrf_res = wrf_sub.resample('Y')#.max()
+                acis_res = acis_sub.resample('Y')#.max()
+                title = 'ERA-Interim / ACIS Daily Precip Total: {} - {} {}'.format(community, 'Annual', metric_lu[metric])
+            elif duration == 555:
+                wrf_res = wrf_sub.resample('M')#.max()
+                acis_res = acis_sub.resample('M')#.max()
+                title = 'ERA-Interim / ACIS Daily Precip Total: {} - {} {}'.format(community, 'Monthly', metric_lu[metric])
             else:
-                wrf_sub = wrf_sub.resample('{}D'.format(duration)).mean()
-                acis_sub = acis_sub.resample('{}D'.format(duration)).mean()
-                title = 'ERA-Interim / ACIS Daily Precip Total: {} - {} Day Mean'.format(community, duration) # fill in when complete with testing
+                wrf_res = wrf_sub.resample('{}D'.format(duration))#.mean()
+                acis_res = acis_sub.resample('{}D'.format(duration))#.mean()
+                title = 'ERA-Interim / ACIS Daily Precip Total: {} - {} Day {}'.format(community, duration, metric_lu[metric])
 
-    # get some correlation coefficients
-    pearson = wrf_sub.corr( acis_sub, method='pearson' ).round(2)
-    spearman = wrf_sub.corr( acis_sub, method='spearman' ).round(2)
-    kendall = wrf_sub.corr( acis_sub, method='kendall' ).round(2)
+        # handle metric choice... -- UGGGO
+        if metric == 'min':
+            wrf_res = wrf_res.min().copy()
+            acis_res = acis_res.min().copy()
+        elif metric == 'mean':
+            wrf_res = wrf_res.mean().copy()
+            acis_res = acis_res.mean().copy()
+        else: # always use max
+            wrf_res = wrf_res.max().copy()
+            acis_res = acis_res.max().copy()
 
-    # slice to the year-range selected
-    wrf_sub = wrf_sub.loc[begin:end]
-    acis_sub = acis_sub.loc[begin:end]
+        # get some correlation coefficients
+        pearson = wrf_res.corr( acis_res, method='pearson' ).round(2)
+        spearman = wrf_res.corr( acis_res, method='spearman' ).round(2)
+        kendall = wrf_res.corr( acis_res, method='kendall' ).round(2)
+        # if ~np.isnan(pearson):
+        #     pearson = pearson.round(2)
+        #     spearman = spearman.round(2)
+        #     kendall = kendall.round(2)
 
-    # build Graph object
-    graph = {'data':[ 
-                go.Bar(
-                    x=wrf_sub.index,
-                    y=wrf_sub,
-                    name='wrf',
-                    ),
-                go.Bar(
-                    x=acis_sub.index,
-                    y=acis_sub,
-                    name='acis',
-                    ),
-                ],
-            'layout': { 
-                    'title': title,
-                    'xaxis': dict(title='time'),
-                    'yaxis': dict(title='mm'),
-                    }
-            }
-    # output correlation values
-    corr_value = '''
-        WRF/ACIS Series Correlation:
-          pearson : {}
-          spearman: {}
-          kendall : {}
-    '''.format(pearson,spearman,kendall)
-    return graph, corr_value
+        # slice to the year-range selected
+        wrf_sub = wrf_res.loc[begin:end]
+        acis_sub = acis_res.loc[begin:end]
+
+        # build Graph object
+        graph = {'data':[ 
+                    go.Bar(
+                        x=wrf_res.index,
+                        y=wrf_res,
+                        name='wrf',
+                        ),
+                    go.Bar(
+                        x=acis_res.index,
+                        y=acis_res,
+                        name='acis',
+                        ),
+                    ],
+                'layout': { 
+                        'title': title,
+                        'xaxis': dict(title='time'),
+                        'yaxis': dict(title='mm'),
+                        }
+                }
+        # output correlation values
+        corr_value = '''
+            WRF/ACIS Series Correlation:
+              pearson : {}
+              spearman: {}
+              kendall : {}
+        '''.format(pearson,spearman,kendall)
+        return graph, corr_value
 
 if __name__ == '__main__':
-    app.run_server( debug=False )
+    app.run_server( debug=True )
